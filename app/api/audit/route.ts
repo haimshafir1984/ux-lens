@@ -1,0 +1,45 @@
+import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
+
+import { mockAuditReport } from "@/lib/audit/mock-data";
+import { runAudit } from "@/lib/audit/engine";
+
+const requestSchema = z.object({
+  url: z.string().url(),
+  action: z.enum(["start", "resume"]).default("start")
+});
+
+export async function POST(request: NextRequest) {
+  try {
+    const json = await request.json();
+    const parsed = requestSchema.safeParse(json);
+
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: "נתוני הבקשה אינם תקינים", details: parsed.error.flatten() },
+        { status: 400 }
+      );
+    }
+
+    const { url, action } = parsed.data;
+    if (action === "start") {
+      const result = await runAudit(url);
+      return NextResponse.json(result);
+    }
+
+    const resumed = await runAudit(url);
+    if ("report" in resumed && resumed.report) {
+      return NextResponse.json({
+        step: "completed",
+        report: { ...resumed.report, requiresFileUpload: false }
+      });
+    }
+
+    return NextResponse.json({
+      step: "completed",
+      report: { ...mockAuditReport, targetUrl: url, score: 86, requiresFileUpload: false }
+    });
+  } catch {
+    return NextResponse.json({ error: "הפעלת הביקורת נכשלה." }, { status: 500 });
+  }
+}
