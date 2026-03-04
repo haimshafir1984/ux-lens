@@ -40,7 +40,18 @@ export async function POST(request: NextRequest) {
       step: "completed",
       report: { ...mockAuditReport, targetUrl: url, score: 86, requiresFileUpload: false }
     });
-  } catch {
-    return NextResponse.json({ error: "הפעלת הביקורת נכשלה." }, { status: 500 });
-  }
+  } 
+  catch (err) {
+
+  console.error("Audit error:", err)
+
+  return Response.json(
+    {
+      error: "הפעלת הביקורת נכשלה.",
+      details: String(err)
+    },
+    { status: 500 }
+  )
+
+}
 }
