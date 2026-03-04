@@ -17,6 +17,19 @@ function normalizeUrl(raw: string): string | null {
   try {
     const parsed = new URL(raw);
     parsed.hash = "";
+    const keysToDelete: string[] = [];
+    parsed.searchParams.forEach((_value, key) => {
+      const lower = key.toLowerCase();
+      if (
+        lower.startsWith("utm_") ||
+        lower === "gclid" ||
+        lower === "fbclid" ||
+        lower === "_ga"
+      ) {
+        keysToDelete.push(key);
+      }
+    });
+    keysToDelete.forEach((key) => parsed.searchParams.delete(key));
     if (!parsed.pathname) parsed.pathname = "/";
     return parsed.toString();
   } catch {
@@ -101,8 +114,8 @@ export async function crawlWebsite(startUrl: string, options: CrawlOptions = {})
   const normalizedStart = normalizeUrl(startUrl);
   if (!normalizedStart) return [startUrl];
 
-  const maxPages = Math.max(1, Math.min(10, options.maxPages ?? 8));
-  const timeoutMs = Math.max(1000, options.timeoutMs ?? 4500);
+  const maxPages = Math.max(1, Math.min(10, options.maxPages ?? 10));
+  const timeoutMs = Math.max(1000, options.timeoutMs ?? 15000);
   const host = new URL(normalizedStart).host;
 
   const queue: CrawlItem[] = [{ url: normalizedStart, score: 1000 }];

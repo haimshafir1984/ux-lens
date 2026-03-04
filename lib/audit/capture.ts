@@ -124,8 +124,16 @@ function quickHash(input: string): string {
 }
 
 export async function captureWebsite(url: string): Promise<CaptureResult> {
+  return captureWebsiteWithOptions(url, { timeoutMs: 15000 });
+}
+
+export async function captureWebsiteWithOptions(
+  url: string,
+  options: { timeoutMs?: number } = {}
+): Promise<CaptureResult> {
   const { artifactsDir, pageLabel, desktopPath, mobilePath, fullPagePath } = getArtifactPaths(url);
   await mkdir(artifactsDir, { recursive: true });
+  const timeoutMs = Math.max(1000, options.timeoutMs ?? 15000);
 
   const browser = await getSharedBrowser();
   if (browser) {
@@ -135,7 +143,7 @@ export async function captureWebsite(url: string): Promise<CaptureResult> {
     try {
       context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
       const page = await context.newPage();
-      await page.goto(url, { waitUntil: "domcontentloaded", timeout: 12000 });
+      await page.goto(url, { waitUntil: "domcontentloaded", timeout: timeoutMs });
       await page.waitForTimeout(800);
       await page.screenshot({ path: desktopPath, fullPage: false });
       await page.screenshot({ path: fullPagePath, fullPage: true });
@@ -146,7 +154,7 @@ export async function captureWebsite(url: string): Promise<CaptureResult> {
           "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
       });
       const mobilePage = await mobileContext.newPage();
-      await mobilePage.goto(url, { waitUntil: "domcontentloaded", timeout: 12000 });
+      await mobilePage.goto(url, { waitUntil: "domcontentloaded", timeout: timeoutMs });
       await mobilePage.waitForTimeout(800);
       await mobilePage.screenshot({ path: mobilePath, fullPage: false });
 

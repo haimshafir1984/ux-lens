@@ -1,5 +1,6 @@
 import { analyzeScreenshotsWithVision } from "@/lib/audit/analyze";
-import { captureWebsite } from "@/lib/audit/capture";
+import { captureWebsiteWithOptions } from "@/lib/audit/capture";
+import type { ScanProgress } from "@/lib/audit/progress-store";
 import type { AuditCheckResult, AuditFinding, AuditReport } from "@/lib/audit/types";
 import { runWithConcurrency } from "@/lib/concurrency";
 import { crawlWebsite } from "@/lib/crawler";
@@ -10,6 +11,8 @@ import { detectUxPatterns } from "@/lib/ux-pattern-intelligence";
 
 type RunAuditOptions = {
   maxPages?: number;
+  timeoutMs?: number;
+  onProgress?: (progress: ScanProgress) => void;
 };
 
 function dedupeFindings(findings: AuditFinding[]): AuditFinding[] {
@@ -121,9 +124,49 @@ function findCriticalBlockers(
 }
 
 export async function runAudit(url: string, options: RunAuditOptions = {}) {
+  const emitProgress = (progress: ScanProgress) => {
+    options.onProgress?.(progress);
+  };
+
   try {
-    const pages = await crawlWebsite(url, { maxPages: options.maxPages ?? 8 });
-    const captures = await runWithConcurrency(pages, 3, async (pageUrl) => captureWebsite(pageUrl));
+    emitProgress({
+      stage: "crawling",
+      message: "סורק את דף הבית",
+      progress: 10,
+      currentPage: url
+    });
+
+    const pages = await crawlWebsite(url, { maxPages: options.maxPages ?? 10, timeoutMs: options.timeoutMs ?? 15000 });
+    emitProgress({
+      stage: "crawling",
+      message: `נמצאו ${pages.length} עמודים פנימיים`,
+      progress: 18,
+      discoveredPages: pages
+    });
+
+    let startedCaptureCount = 0;
+    const capturesRaw = await runWithConcurrency(pages, 3, async (pageUrl) => {
+      const startedIndex = startedCaptureCount + 1;
+      startedCaptureCount += 1;
+      emitProgress({
+        stage: "capturing",
+        message: `מצלם עמוד ${startedIndex} מתוך ${pages.length}`,
+        progress: 20 + Math.round((startedIndex / Math.max(1, pages.length)) * 25),
+        currentPage: pageUrl,
+        currentPageIndex: startedIndex,
+        totalPages: pages.length,
+        discoveredPages: pages
+      });
+
+      try {
+        return await captureWebsiteWithOptions(pageUrl, { timeoutMs: options.timeoutMs ?? 15000 });
+      } catch {
+        // Fail-safe: skip a failed page and continue scanning.
+        return null;
+      }
+    });
+    const captures = capturesRaw.filter((value): value is NonNullable<typeof value> => Boolean(value));
+
     if (captures.length === 0) {
       return {
         step: "completed" as const,
@@ -148,8 +191,21 @@ export async function runAudit(url: string, options: RunAuditOptions = {}) {
     }
 
     const uniqueCaptures = Array.from(firstByFingerprint.values());
-    const analyzedUnique = await runWithConcurrency(uniqueCaptures, 3, async (captured) =>
-      analyzeScreenshotsWithVision({
+    let startedAnalyzeCount = 0;
+    const analyzedUnique = await runWithConcurrency(uniqueCaptures, 3, async (captured) => {
+      const analyzeIndex = startedAnalyzeCount + 1;
+      startedAnalyzeCount += 1;
+      emitProgress({
+        stage: "analyzing",
+        message: `מנתח עמוד ${analyzeIndex} מתוך ${uniqueCaptures.length}`,
+        progress: 50 + Math.round((analyzeIndex / Math.max(1, uniqueCaptures.length)) * 30),
+        currentPage: captured.pageUrl,
+        currentPageIndex: analyzeIndex,
+        totalPages: uniqueCaptures.length,
+        discoveredPages: pages
+      });
+
+      return analyzeScreenshotsWithVision({
         url: captured.pageUrl,
         desktopPath: captured.desktopPath,
         mobilePath: captured.mobilePath,
@@ -161,8 +217,8 @@ export async function runAudit(url: string, options: RunAuditOptions = {}) {
           mobile: captured.screenshots.mobile,
           fullPage: captured.screenshots.fullPage
         }
-      })
-    );
+      });
+    });
 
     const reportByFingerprint = new Map<string, AuditReport>();
     uniqueCaptures.forEach((capture, index) => {
@@ -212,6 +268,12 @@ export async function runAudit(url: string, options: RunAuditOptions = {}) {
     });
 
     const report = aggregateReports(url, pageReports);
+    emitProgress({
+      stage: "generating_report",
+      message: "מריץ ניתוח UX ומייצר דוח",
+      progress: 92,
+      discoveredPages: pages
+    });
     report.insights = detectUxPatterns({ pageReports });
     report.intentAnalysis = detectUxIntent({
       report,
@@ -248,6 +310,12 @@ export async function runAudit(url: string, options: RunAuditOptions = {}) {
     }
 
     const requiresUpload = report.requiresFileUpload;
+    emitProgress({
+      stage: "generating_report",
+      message: "מסיים יצירת דוח",
+      progress: 100,
+      discoveredPages: pages
+    });
     if (requiresUpload) {
       return {
         step: "interactionRequired" as const,

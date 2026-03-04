@@ -1,11 +1,12 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Bot, Sparkles } from "lucide-react";
 
 import { AuditStateTimeline } from "@/components/audit-state-timeline";
 import { InteractionRequiredCard } from "@/components/interaction-required-card";
 import { ReportDashboard } from "@/components/report-dashboard";
+import { ScanProgressCard } from "@/components/scan-progress-card";
 import { UrlInputStage } from "@/components/url-input-stage";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -17,6 +18,16 @@ export function AuditWorkbench() {
   const [url, setUrl] = useState("https://example.com");
   const [state, setState] = useState<AuditState>(initialAuditState);
   const [loading, setLoading] = useState(false);
+  const [scanJobId, setScanJobId] = useState<string | null>(null);
+  const [scanProgress, setScanProgress] = useState<{
+    stage: "crawling" | "capturing" | "analyzing" | "generating_report";
+    message: string;
+    progress: number;
+    currentPage?: string;
+    currentPageIndex?: number;
+    totalPages?: number;
+    discoveredPages?: string[];
+  } | null>(null);
   const uploadPrompt =
     "הגעתי לשלב שדורש העלאת קובץ כדי להמשיך את הביקורת. נא להעלות כאן קובץ לדוגמה.";
 
@@ -37,7 +48,10 @@ export function AuditWorkbench() {
       });
       const data = await response.json();
 
-      if (data.step === "interactionRequired") {
+      if (data.step === "scanning" && data.jobId) {
+        setScanJobId(data.jobId);
+        setScanProgress(data.progress ?? null);
+      } else if (data.step === "interactionRequired") {
         setState((prev) =>
           transitionAuditState(prev, {
             type: "REQUIRE_UPLOAD",
@@ -91,6 +105,74 @@ export function AuditWorkbench() {
     }
   }
 
+  useEffect(() => {
+    if (!scanJobId || state.step !== "scanning") return;
+
+    let cancelled = false;
+    const interval = setInterval(async () => {
+      try {
+        const response = await fetch("/api/audit", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "status", jobId: scanJobId })
+        });
+        const data = await response.json();
+        if (cancelled) return;
+
+        if (data.progress) {
+          setScanProgress(data.progress);
+        }
+
+        if (data.step === "completed" && data.report) {
+          clearInterval(interval);
+          setScanJobId(null);
+          setScanProgress(null);
+          setLoading(false);
+          setState((prev) => transitionAuditState(prev, { type: "FINALIZE_SUCCESS", report: data.report }));
+          return;
+        }
+
+        if (data.step === "interactionRequired" && data.report) {
+          clearInterval(interval);
+          setScanJobId(null);
+          setLoading(false);
+          setState((prev) => transitionAuditState(prev, { type: "SCAN_COMPLETE", report: data.report }));
+          setState((prev) =>
+            transitionAuditState(prev, {
+              type: "REQUIRE_UPLOAD",
+              promptMessage: data.promptMessage ?? uploadPrompt
+            })
+          );
+          return;
+        }
+
+        if (data.step === "failed") {
+          clearInterval(interval);
+          setScanJobId(null);
+          setScanProgress(null);
+          setLoading(false);
+          setState((prev) =>
+            transitionAuditState(prev, {
+              type: "FAIL",
+              message: data.error ?? "הסריקה נכשלה."
+            })
+          );
+        }
+      } catch {
+        clearInterval(interval);
+        setScanJobId(null);
+        setScanProgress(null);
+        setLoading(false);
+        setState((prev) => transitionAuditState(prev, { type: "FAIL", message: "בקשת סטטוס נכשלה." }));
+      }
+    }, 1000);
+
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [scanJobId, state.step, uploadPrompt]);
+
   return (
     <div className="mx-auto grid w-full max-w-6xl gap-6 lg:grid-cols-[1.1fr_0.9fr]">
       <div className="space-y-6">
@@ -105,6 +187,8 @@ export function AuditWorkbench() {
             loading={loading}
           />
         )}
+
+        {state.step === "scanning" && <ScanProgressCard progress={scanProgress} />}
 
         {canShowReport && <ReportDashboard report={state.context.report ?? mockAuditReport} />}
       </div>
