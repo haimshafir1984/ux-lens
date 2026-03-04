@@ -6,11 +6,11 @@ import { cn } from "@/lib/utils";
 export type DashboardSection = "summary" | "issues" | "pages" | "intent" | "fixes";
 
 const NAV_ITEMS: Array<{ id: DashboardSection; label: string }> = [
-  { id: "summary", label: "Summary" },
-  { id: "issues", label: "Issues" },
-  { id: "pages", label: "Pages" },
-  { id: "intent", label: "Intent" },
-  { id: "fixes", label: "AI Fixes" }
+  { id: "summary", label: "סיכום" },
+  { id: "issues", label: "ממצאים" },
+  { id: "pages", label: "עמודים" },
+  { id: "intent", label: "כוונה" },
+  { id: "fixes", label: "תיקוני AI" }
 ];
 
 type SidebarNavigationProps = {
@@ -21,8 +21,8 @@ type SidebarNavigationProps = {
 export function SidebarNavigation({ section, onSectionChange }: SidebarNavigationProps) {
   return (
     <>
-      <div className="sticky top-6 hidden rounded-2xl border border-slate-200 bg-white p-3 shadow-sm lg:block">
-        <p className="mb-2 px-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Dashboard</p>
+      <div className="sticky top-6 hidden rounded-2xl border border-slate-200 bg-white p-3 lg:block">
+        <p className="mb-2 px-2 text-xs font-semibold tracking-wide text-slate-500">ניווט הדשבורד</p>
         <div className="space-y-1">
           {NAV_ITEMS.map((item) => (
             <Button

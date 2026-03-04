@@ -20,6 +20,24 @@ function toIssueSeverity(issue: AuditFinding): IssueSeverityLevel {
   return "low";
 }
 
+function categoryLabel(category: AuditFinding["category"]): string {
+  if (category === "contrast") return "ניגודיות";
+  if (category === "accessibility") return "נגישות";
+  if (category === "visualHierarchy") return "היררכיה חזותית";
+  if (category === "responsive") return "רספונסיביות";
+  if (category === "typography") return "טיפוגרפיה";
+  if (category === "forms") return "טפסים";
+  if (category === "navigation") return "ניווט";
+  if (category === "consistency") return "עקביות";
+  if (category === "feedback") return "פידבק מערכת";
+  if (category === "performance") return "ביצועים";
+  if (category === "trust") return "אמון";
+  if (category === "conversion") return "המרה";
+  if (category === "content") return "תוכן";
+  if (category === "errorPrevention") return "מניעת שגיאות";
+  return "מגע במובייל";
+}
+
 export function ReportDashboard({ report }: { report: AuditReport }) {
   const [section, setSection] = useState<DashboardSection>("summary");
   const [issueSearch, setIssueSearch] = useState("");
@@ -54,7 +72,7 @@ export function ReportDashboard({ report }: { report: AuditReport }) {
     <div className="space-y-4">
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-xl">UX Audit Dashboard</CardTitle>
+          <CardTitle className="text-xl">דשבורד ביקורת UX</CardTitle>
           <CardDescription>{report.targetUrl}</CardDescription>
         </CardHeader>
       </Card>
@@ -69,13 +87,13 @@ export function ReportDashboard({ report }: { report: AuditReport }) {
             <div className="space-y-3">
               <Card>
                 <CardHeader>
-                  <CardTitle>Issues Explorer</CardTitle>
+                  <CardTitle>סייר ממצאים</CardTitle>
                 </CardHeader>
                 <CardContent className="grid gap-2 sm:grid-cols-3">
                   <input
                     value={issueSearch}
                     onChange={(event) => setIssueSearch(event.target.value)}
-                    placeholder="Search issues..."
+                    placeholder="חיפוש ממצאים..."
                     className="h-10 rounded-xl border border-slate-200 px-3 text-sm"
                   />
                   <select
@@ -83,11 +101,11 @@ export function ReportDashboard({ report }: { report: AuditReport }) {
                     onChange={(event) => setSeverityFilter(event.target.value as "all" | IssueSeverityLevel)}
                     className="h-10 rounded-xl border border-slate-200 px-3 text-sm"
                   >
-                    <option value="all">All severities</option>
-                    <option value="critical">Critical</option>
-                    <option value="high">High</option>
-                    <option value="medium">Medium</option>
-                    <option value="low">Low</option>
+                    <option value="all">כל רמות החומרה</option>
+                    <option value="critical">קריטי</option>
+                    <option value="high">גבוה</option>
+                    <option value="medium">בינוני</option>
+                    <option value="low">נמוך</option>
                   </select>
                   <select
                     value={categoryFilter}
@@ -96,10 +114,10 @@ export function ReportDashboard({ report }: { report: AuditReport }) {
                     }
                     className="h-10 rounded-xl border border-slate-200 px-3 text-sm"
                   >
-                    <option value="all">All categories</option>
+                    <option value="all">כל הקטגוריות</option>
                     {categories.map((category) => (
                       <option key={category} value={category}>
-                        {category}
+                        {categoryLabel(category)}
                       </option>
                     ))}
                   </select>
@@ -117,7 +135,7 @@ export function ReportDashboard({ report }: { report: AuditReport }) {
                 ))}
                 {filteredIssues.length === 0 && (
                   <Card>
-                    <CardContent className="p-4 text-sm text-slate-500">No issues match your filters.</CardContent>
+                    <CardContent className="p-4 text-sm text-slate-500">לא נמצאו ממצאים שתואמים לסינון.</CardContent>
                   </Card>
                 )}
               </div>
@@ -128,8 +146,8 @@ export function ReportDashboard({ report }: { report: AuditReport }) {
             <div className="space-y-3">
               <Card>
                 <CardHeader>
-                  <CardTitle>Pages View</CardTitle>
-                  <CardDescription>Explore scanned pages and issues per page.</CardDescription>
+                  <CardTitle>תצוגת עמודים</CardTitle>
+                  <CardDescription>סקירה מהירה של העמודים שנסרקו והממצאים בכל עמוד.</CardDescription>
                 </CardHeader>
               </Card>
               <div className="grid gap-3 md:grid-cols-2">
@@ -150,8 +168,8 @@ export function ReportDashboard({ report }: { report: AuditReport }) {
             <div className="space-y-3">
               <Card>
                 <CardHeader>
-                  <CardTitle>AI Fixes</CardTitle>
-                  <CardDescription>Problem, why it matters, and suggested fix.</CardDescription>
+                  <CardTitle>תיקוני AI</CardTitle>
+                  <CardDescription>בעיה, ההשפעה שלה, והצעת תיקון.</CardDescription>
                 </CardHeader>
               </Card>
               {(report.redesignSuggestions ?? []).map((item, index) => (
@@ -165,7 +183,7 @@ export function ReportDashboard({ report }: { report: AuditReport }) {
               {(report.redesignSuggestions ?? []).length === 0 && (
                 <Card>
                   <CardContent className="p-4 text-sm text-slate-500">
-                    No AI fix suggestions available for this report.
+                    אין כרגע הצעות תיקון מבוססות AI לדוח זה.
                   </CardContent>
                 </Card>
               )}

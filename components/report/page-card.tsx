@@ -21,10 +21,10 @@ type PageCardProps = {
 function pageTitleFromUrl(url: string): string {
   try {
     const parsed = new URL(url);
-    const path = parsed.pathname === "/" ? "Homepage" : parsed.pathname.replace(/\//g, " ").trim();
-    return path.length > 0 ? path : "Page";
+    const path = parsed.pathname === "/" ? "דף הבית" : parsed.pathname.replace(/\//g, " ").trim();
+    return path.length > 0 ? path : "עמוד";
   } catch {
-    return "Page";
+    return "עמוד";
   }
 }
 
@@ -48,22 +48,22 @@ export function PageCard({ page, primaryCta }: PageCardProps) {
             {page.score}
           </Badge>
         </div>
-        <p className="mt-2 text-xs text-slate-600">Issues: {page.findings.length}</p>
-        {page.reusedFrom && <p className="mt-1 text-xs text-slate-500">Template reused from: {page.reusedFrom}</p>}
+        <p className="mt-2 text-xs text-slate-600">ממצאים: {page.findings.length}</p>
+        {page.reusedFrom && <p className="mt-1 text-xs text-slate-500">נעשה שימוש חוזר מתבנית: {page.reusedFrom}</p>}
 
         <button type="button" className="mt-2 text-xs font-medium text-blue-600 hover:text-blue-700" onClick={() => setOpen((v) => !v)}>
-          {open ? "Hide page details" : "Open page details"}
+          {open ? "הסתר פרטי עמוד" : "פתח פרטי עמוד"}
         </button>
 
         {open && (
           <div className="mt-2 space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs">
-            <p className="font-semibold text-slate-700">Detected CTAs</p>
+            <p className="font-semibold text-slate-700">CTA שזוהו</p>
             <p className="text-slate-600">
-              {ctaFindings.length > 0 ? ctaFindings.map((item) => item.title).slice(0, 3).join(" | ") : primaryCta ?? "Not detected"}
+              {ctaFindings.length > 0 ? ctaFindings.map((item) => item.title).slice(0, 3).join(" | ") : primaryCta ?? "לא זוהה"}
             </p>
-            <p className="font-semibold text-slate-700">Navigation elements</p>
+            <p className="font-semibold text-slate-700">רכיבי ניווט</p>
             <p className="text-slate-600">
-              {navigationIssues.length > 0 ? navigationIssues.map((item) => item.title).slice(0, 3).join(" | ") : "No major navigation issues detected"}
+              {navigationIssues.length > 0 ? navigationIssues.map((item) => item.title).slice(0, 3).join(" | ") : "לא זוהו בעיות ניווט מרכזיות"}
             </p>
           </div>
         )}

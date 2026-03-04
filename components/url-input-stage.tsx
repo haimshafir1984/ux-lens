@@ -15,7 +15,7 @@ type Props = {
 
 export function UrlInputStage({ value, onChange, onStart, loading }: Props) {
   return (
-    <Card className="shadow-glow">
+    <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-2xl">
           <Globe className="h-5 w-5 text-blue-400" />
@@ -27,7 +27,7 @@ export function UrlInputStage({ value, onChange, onStart, loading }: Props) {
       </CardHeader>
       <CardContent className="space-y-4">
         <Input
-          placeholder="https://your-site.co.il"
+          placeholder="https://example.co.il"
           value={value}
           onChange={(event) => onChange(event.target.value)}
         />

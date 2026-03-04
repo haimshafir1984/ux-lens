@@ -10,31 +10,33 @@ type AIFixCardProps = {
 
 function whyItMatters(problem: string): string {
   if (/cta|action|signup|trial/i.test(problem)) {
-    return "A weak primary action usually reduces conversion and makes the journey unclear.";
+    return "פעולה ראשית חלשה בדרך כלל מורידה המרות ומקשה על המשתמש להבין את הצעד הבא.";
   }
   if (/navigation|menu/i.test(problem)) {
-    return "Navigation friction increases bounce rate and slows task completion.";
+    return "חיכוך בניווט מעלה נטישה ומאט השלמת משימות.";
   }
   if (/contrast|typography|mobile/i.test(problem)) {
-    return "Readability and mobile ergonomics directly impact trust and usability.";
+    return "קריאות וארגונומיה במובייל משפיעות ישירות על אמון ושימושיות.";
   }
-  return "This issue impacts user confidence, clarity, and conversion outcomes.";
+  return "הבעיה משפיעה על בהירות, אמון המשתמש ותוצאות ההמרה.";
 }
 
 export function AIFixCard({ problem, suggestion, priority }: AIFixCardProps) {
   return (
-    <Card>
+    <Card className="shadow-none">
       <CardContent className="p-4">
         <details>
           <summary className="cursor-pointer list-none">
             <div className="flex items-center justify-between gap-2">
-              <p className="text-sm font-semibold text-slate-900">Problem: {problem}</p>
-              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">{priority}</span>
+              <p className="text-sm font-semibold text-slate-900">בעיה: {problem}</p>
+              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">
+                {priority === "high" ? "עדיפות גבוהה" : priority === "medium" ? "עדיפות בינונית" : "עדיפות נמוכה"}
+              </span>
             </div>
           </summary>
           <div className="mt-3 space-y-2 text-sm">
-            <p><span className="font-semibold">Why it matters:</span> {whyItMatters(problem)}</p>
-            <p><span className="font-semibold">Suggested fix:</span> {suggestion}</p>
+            <p><span className="font-semibold">למה זה חשוב:</span> {whyItMatters(problem)}</p>
+            <p><span className="font-semibold">תיקון מוצע:</span> {suggestion}</p>
           </div>
         </details>
       </CardContent>

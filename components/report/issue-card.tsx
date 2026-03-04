@@ -29,10 +29,10 @@ function severityClasses(level: IssueSeverityLevel): string {
 }
 
 function severityLabel(level: IssueSeverityLevel): string {
-  if (level === "critical") return "Critical";
-  if (level === "high") return "High";
-  if (level === "medium") return "Medium";
-  return "Low";
+  if (level === "critical") return "קריטי";
+  if (level === "high") return "גבוה";
+  if (level === "medium") return "בינוני";
+  return "נמוך";
 }
 
 function affectedPages(issue: AuditFinding, report: AuditReport): string[] {
@@ -54,7 +54,7 @@ export function IssueCard({ issue, report, defaultOpen = false }: IssueCardProps
   );
 
   return (
-    <Card className={cn("border", severityClasses(level))}>
+    <Card className={cn("border", severityClasses(level), "shadow-none")}>
       <CardContent className="space-y-2 p-4">
         <div className="flex items-start justify-between gap-2">
           <div>
@@ -66,19 +66,19 @@ export function IssueCard({ issue, report, defaultOpen = false }: IssueCardProps
           </Badge>
         </div>
 
-        <p className="text-xs text-slate-500">Affected pages: {pages.length}</p>
+        <p className="text-xs text-slate-500">עמודים מושפעים: {pages.length}</p>
         <button type="button" className="text-xs font-medium text-blue-600 hover:text-blue-700" onClick={() => setOpen((v) => !v)}>
-          {open ? "Hide details" : "Show details"}
+          {open ? "הסתר פרטים" : "הצג פרטים"}
         </button>
 
         {open && (
           <div className="space-y-2 rounded-lg border border-slate-200 bg-white p-3 text-xs text-slate-700">
-            <p><span className="font-semibold">Explanation:</span> {issue.detail}</p>
-            <p><span className="font-semibold">Affected pages:</span> {pages.join(" | ")}</p>
-            <p><span className="font-semibold">Screenshots:</span> Available in capture artifacts (not embedded in current API payload).</p>
+            <p><span className="font-semibold">הסבר:</span> {issue.detail}</p>
+            <p><span className="font-semibold">עמודים מושפעים:</span> {pages.join(" | ")}</p>
+            <p><span className="font-semibold">צילומי מסך:</span> זמינים בארטיפקטים של הסריקה (לא מוטמעים ב־API הנוכחי).</p>
             {relatedFixes.length > 0 && (
               <div className="space-y-1">
-                <p className="font-semibold">AI fix suggestions:</p>
+                <p className="font-semibold">הצעות תיקון מבוססות AI:</p>
                 {relatedFixes.map((fix, index) => (
                   <p key={`${fix.problem}-${index}`}>- {fix.suggestion}</p>
                 ))}
