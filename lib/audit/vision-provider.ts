@@ -43,19 +43,22 @@ async function imageToBase64(path: string): Promise<string | null> {
 async function callOpenAI(
   prompt: string,
   desktopPath: string,
-  mobilePath: string
+  mobilePath: string,
+  fullPagePath?: string
 ): Promise<VisionResult | undefined> {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) return undefined;
 
   const desktop = await imageToBase64(desktopPath);
   const mobile = await imageToBase64(mobilePath);
-  if (!desktop && !mobile) return undefined;
+  const fullPage = fullPagePath ? await imageToBase64(fullPagePath) : null;
+  if (!desktop && !mobile && !fullPage) return undefined;
 
   const model = process.env.OPENAI_VISION_MODEL ?? "gpt-4o-mini";
   const content: any[] = [{ type: "text", text: prompt }];
   if (desktop) content.push({ type: "image_url", image_url: { url: `data:image/png;base64,${desktop}` } });
   if (mobile) content.push({ type: "image_url", image_url: { url: `data:image/png;base64,${mobile}` } });
+  if (fullPage) content.push({ type: "image_url", image_url: { url: `data:image/png;base64,${fullPage}` } });
 
   const response = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
@@ -81,14 +84,16 @@ async function callOpenAI(
 async function callAnthropic(
   prompt: string,
   desktopPath: string,
-  mobilePath: string
+  mobilePath: string,
+  fullPagePath?: string
 ): Promise<VisionResult | undefined> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) return undefined;
 
   const desktop = await imageToBase64(desktopPath);
   const mobile = await imageToBase64(mobilePath);
-  if (!desktop && !mobile) return undefined;
+  const fullPage = fullPagePath ? await imageToBase64(fullPagePath) : null;
+  if (!desktop && !mobile && !fullPage) return undefined;
 
   const model = process.env.ANTHROPIC_VISION_MODEL ?? "claude-3-5-sonnet-latest";
   const content: any[] = [{ type: "text", text: `${prompt}\nReturn JSON only.` }];
@@ -102,6 +107,12 @@ async function callAnthropic(
     content.push({
       type: "image",
       source: { type: "base64", media_type: "image/png", data: mobile }
+    });
+  }
+  if (fullPage) {
+    content.push({
+      type: "image",
+      source: { type: "base64", media_type: "image/png", data: fullPage }
     });
   }
 
@@ -130,16 +141,20 @@ async function callAnthropic(
 export async function getVisionFindings(
   prompt: string,
   desktopPath: string,
-  mobilePath: string
+  mobilePath: string,
+  fullPagePath?: string
 ): Promise<VisionResult | undefined> {
   const provider = process.env.AI_PROVIDER;
   if (provider === "openai") {
-    return callOpenAI(prompt, desktopPath, mobilePath);
+    return callOpenAI(prompt, desktopPath, mobilePath, fullPagePath);
   }
   if (provider === "anthropic") {
-    return callAnthropic(prompt, desktopPath, mobilePath);
+    return callAnthropic(prompt, desktopPath, mobilePath, fullPagePath);
   }
 
   // Auto mode: try OpenAI first, then Anthropic.
-  return (await callOpenAI(prompt, desktopPath, mobilePath)) ?? (await callAnthropic(prompt, desktopPath, mobilePath));
+  return (
+    (await callOpenAI(prompt, desktopPath, mobilePath, fullPagePath)) ??
+    (await callAnthropic(prompt, desktopPath, mobilePath, fullPagePath))
+  );
 }

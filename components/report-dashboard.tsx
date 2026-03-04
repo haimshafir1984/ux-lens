@@ -41,6 +41,12 @@ function severityIcon(severity: AuditFinding["severity"]) {
   return <CheckCircle2 className="h-4 w-4 text-emerald-400" />;
 }
 
+function priorityLabel(priority: "high" | "medium" | "low") {
+  if (priority === "high") return "גבוהה";
+  if (priority === "low") return "נמוכה";
+  return "בינונית";
+}
+
 export function ReportDashboard({ report }: { report: AuditReport }) {
   const criticalCount = report.findings.filter((f) => f.severity === "critical").length;
   const warningCount = report.findings.filter((f) => f.severity === "warning").length;
@@ -83,6 +89,61 @@ export function ReportDashboard({ report }: { report: AuditReport }) {
         </CardContent>
       </Card>
 
+      {report.criticalUxBlockersDetected && (
+        <Card className="border-red-200">
+          <CardHeader>
+            <CardTitle className="text-red-700">{report.criticalUxBlockersMessage ?? "Critical UX blockers detected"}</CardTitle>
+            <CardDescription>התגלו חסמים מערכתיים שעלולים לפגוע משמעותית בהמרה ובשימושיות.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {(report.criticalUxBlockers ?? []).map((blocker) => (
+              <Badge key={blocker} variant="critical">
+                {blocker}
+              </Badge>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+
+      {report.uxScore && (
+        <Card>
+          <CardHeader>
+            <CardTitle>UX Score לפי קטגוריות</CardTitle>
+            <CardDescription>שקלול משולב של כל העמודים שנסרקו.</CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-2 text-sm sm:grid-cols-2">
+            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">ניווט: {report.uxScore.categories.navigation}</div>
+            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">היררכיה: {report.uxScore.categories.hierarchy}</div>
+            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">CTA: {report.uxScore.categories.CTA}</div>
+            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">טיפוגרפיה: {report.uxScore.categories.typography}</div>
+            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">Spacing: {report.uxScore.categories.spacing}</div>
+            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">ניגודיות: {report.uxScore.categories.contrast}</div>
+            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">מובייל: {report.uxScore.categories.mobile}</div>
+            {typeof report.uxScore.categories.performance === "number" && (
+              <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                ביצועים נתפסים: {report.uxScore.categories.performance}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {report.topCriticalProblems && report.topCriticalProblems.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Top 5 בעיות קריטיות</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {report.topCriticalProblems.slice(0, 5).map((problem) => (
+              <div key={problem.id} className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm">
+                <p className="font-medium text-red-800">{problem.title}</p>
+                <p className="text-red-700">{problem.detail}</p>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+
       <Card>
         <CardHeader>
           <CardTitle>אנוטציות חזותיות</CardTitle>
@@ -119,6 +180,65 @@ export function ReportDashboard({ report }: { report: AuditReport }) {
           </div>
         </CardContent>
       </Card>
+
+      {report.pageReports && report.pageReports.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>ממצאים לפי עמוד</CardTitle>
+            <CardDescription>כיסוי רב־עמודי עם ציון לכל עמוד מרכזי.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {report.pageReports.map((page) => (
+              <div key={page.url} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                <div className="mb-2 flex items-center justify-between text-sm">
+                  <span className="truncate text-slate-700">{page.url}</span>
+                  <Badge variant={page.score < 60 ? "critical" : page.score < 75 ? "warning" : "good"}>
+                    ציון: {page.score}
+                  </Badge>
+                </div>
+                <p className="text-xs text-slate-600">ממצאים: {page.findings.length}</p>
+                {page.reusedFrom && (
+                  <p className="text-xs text-slate-500">Template duplicate, reused analysis from: {page.reusedFrom}</p>
+                )}
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+
+      {report.redesignSuggestions && report.redesignSuggestions.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>הצעות Redesign מבוססות AI</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {report.redesignSuggestions.map((item, index) => (
+              <div key={`${item.problem}-${index}`} className="rounded-xl border border-slate-200 bg-white p-4">
+                <p className="mb-1 text-sm font-semibold text-slate-900">בעיה: {item.problem}</p>
+                <p className="text-sm text-slate-600">הצעה: {item.suggestion}</p>
+                <p className="mt-2 text-xs text-slate-500">עדיפות: {priorityLabel(item.priority)}</p>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+
+      {report.insights && report.insights.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>UX Insights חוצי־עמודים</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {report.insights.map((insight, index) => (
+              <div key={`${insight.pattern}-${index}`} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                <p className="text-sm font-semibold text-slate-900">{insight.pattern}</p>
+                <p className="text-xs text-slate-600">חומרה: {insight.severity}</p>
+                <p className="mt-1 text-xs text-slate-500">{insight.evidence.join(" | ")}</p>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>

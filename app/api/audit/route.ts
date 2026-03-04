@@ -6,7 +6,8 @@ import { runAudit } from "@/lib/audit/engine";
 
 const requestSchema = z.object({
   url: z.string().url(),
-  action: z.enum(["start", "resume"]).default("start")
+  action: z.enum(["start", "resume"]).default("start"),
+  maxPages: z.number().int().min(1).max(10).optional()
 });
 
 export async function POST(request: NextRequest) {
@@ -21,13 +22,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { url, action } = parsed.data;
+    const { url, action, maxPages } = parsed.data;
     if (action === "start") {
-      const result = await runAudit(url);
+      const result = await runAudit(url, { maxPages });
       return NextResponse.json(result);
     }
 
-    const resumed = await runAudit(url);
+    const resumed = await runAudit(url, { maxPages });
     if ("report" in resumed && resumed.report) {
       return NextResponse.json({
         step: "completed",

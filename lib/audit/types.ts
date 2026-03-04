@@ -67,6 +67,41 @@ export type AuditReport = {
   requiresFileUpload: boolean;
   checks: AuditCheckResult[];
   checksSummary: AuditChecksSummary;
+  uxScore?: {
+    overallScore: number;
+    categories: {
+      navigation: number;
+      hierarchy: number;
+      CTA: number;
+      typography: number;
+      spacing: number;
+      contrast: number;
+      mobile: number;
+      performance?: number;
+    };
+  };
+  topCriticalProblems?: AuditFinding[];
+  pageReports?: Array<{
+    url: string;
+    score: number;
+    findings: AuditFinding[];
+    domFingerprint?: string;
+    reusedFrom?: string;
+  }>;
+  redesignSuggestions?: Array<{
+    problem: string;
+    suggestion: string;
+    priority: "high" | "medium" | "low";
+  }>;
+  insights?: Array<{
+    pattern: string;
+    severity: "high" | "medium" | "low";
+    evidence: string[];
+    source?: Array<"rules" | "heuristics" | "vision" | "uxScore">;
+  }>;
+  criticalUxBlockersDetected?: boolean;
+  criticalUxBlockersMessage?: string;
+  criticalUxBlockers?: string[];
 };
 
 export type AuditContext = {

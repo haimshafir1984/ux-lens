@@ -1,13 +1,23 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { defaultSignals, type AuditSignals } from "@/lib/audit/signals";
+import { getSharedBrowser } from "@/lib/playwright-browser";
 
-type CaptureResult = {
+export type CaptureResult = {
+  pageUrl: string;
   desktopPath: string;
   mobilePath: string;
+  fullPagePath: string;
+  domFingerprint: string;
   domSummary: string;
   signals: AuditSignals;
+  screenshots: {
+    desktop: Buffer;
+    mobile: Buffer;
+    fullPage: Buffer;
+  };
+  internalLinks: string[];
 };
 
 function hashUrl(url: string): number {
@@ -43,16 +53,6 @@ function syntheticSignals(url: string): AuditSignals {
   };
 }
 
-async function tryImportPlaywright(): Promise<any | null> {
-  try {
-    // Avoid compile-time dependency on playwright package.
-    const importer = new Function('return import("playwright")') as () => Promise<any>;
-    return await importer();
-  } catch {
-    return null;
-  }
-}
-
 function toDomSummary(signals: AuditSignals): string {
   return [
     `forms=${signals.formCount}`,
@@ -66,37 +66,74 @@ function toDomSummary(signals: AuditSignals): string {
   ].join(", ");
 }
 
-export async function captureWebsite(url: string): Promise<CaptureResult> {
+function isSameDomain(targetUrl: string, pageUrl: string): boolean {
+  try {
+    return new URL(targetUrl).host === new URL(pageUrl).host;
+  } catch {
+    return false;
+  }
+}
+
+async function readBufferOrEmpty(filePath: string): Promise<Buffer> {
+  try {
+    return await readFile(filePath);
+  } catch {
+    return Buffer.from([]);
+  }
+}
+
+function getArtifactPaths(url: string) {
   const artifactsDir = path.join(process.cwd(), ".audit-artifacts");
-  await mkdir(artifactsDir, { recursive: true });
   const safeName = encodeURIComponent(url).replace(/%/g, "_");
-  const desktopPath = path.join(artifactsDir, `${safeName}-desktop.png`);
-  const mobilePath = path.join(artifactsDir, `${safeName}-mobile.png`);
+  return {
+    artifactsDir,
+    desktopPath: path.join(artifactsDir, `${safeName}-desktop.png`),
+    mobilePath: path.join(artifactsDir, `${safeName}-mobile.png`),
+    fullPagePath: path.join(artifactsDir, `${safeName}-fullpage.png`)
+  };
+}
 
-  const playwright = await tryImportPlaywright();
-  if (playwright?.chromium) {
-    const browser = await playwright.chromium.launch({ headless: true });
+function quickHash(input: string): string {
+  let hash = 2166136261;
+  for (let index = 0; index < input.length; index += 1) {
+    hash ^= input.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return Math.abs(hash >>> 0).toString(16);
+}
+
+export async function captureWebsite(url: string): Promise<CaptureResult> {
+  const { artifactsDir, desktopPath, mobilePath, fullPagePath } = getArtifactPaths(url);
+  await mkdir(artifactsDir, { recursive: true });
+
+  const browser = await getSharedBrowser();
+  if (browser) {
+    let context: any | undefined;
+    let mobileContext: any | undefined;
+
     try {
-      const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+      context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
       const page = await context.newPage();
-      await page.goto(url, { waitUntil: "domcontentloaded", timeout: 25000 });
-      await page.waitForTimeout(1200);
-      await page.screenshot({ path: desktopPath, fullPage: true });
+      await page.goto(url, { waitUntil: "domcontentloaded", timeout: 12000 });
+      await page.waitForTimeout(800);
+      await page.screenshot({ path: desktopPath, fullPage: false });
+      await page.screenshot({ path: fullPagePath, fullPage: true });
 
-      const mobileContext = await browser.newContext({
+      mobileContext = await browser.newContext({
         viewport: { width: 390, height: 844 },
         userAgent:
           "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
       });
       const mobilePage = await mobileContext.newPage();
-      await mobilePage.goto(url, { waitUntil: "domcontentloaded", timeout: 25000 });
-      await mobilePage.waitForTimeout(1200);
-      await mobilePage.screenshot({ path: mobilePath, fullPage: true });
+      await mobilePage.goto(url, { waitUntil: "domcontentloaded", timeout: 12000 });
+      await mobilePage.waitForTimeout(800);
+      await mobilePage.screenshot({ path: mobilePath, fullPage: false });
 
-      const signals = await page.evaluate(() => {
+      const payload = await page.evaluate(() => {
         const toArray = <T,>(value: ArrayLike<T>) => Array.from(value);
-        const styles = toArray(document.querySelectorAll<HTMLElement>("a,button,input,textarea,select,[role='button']"))
-          .map((el) => window.getComputedStyle(el).outlineStyle + "|" + window.getComputedStyle(el).outlineWidth);
+        const styles = toArray(
+          document.querySelectorAll<HTMLElement>("a,button,input,textarea,select,[role='button']")
+        ).map((el) => window.getComputedStyle(el).outlineStyle + "|" + window.getComputedStyle(el).outlineWidth);
         const imageCount = document.querySelectorAll("img").length;
         const imageMissingAltCount = toArray(document.querySelectorAll<HTMLImageElement>("img")).filter(
           (img) => !img.alt || img.alt.trim().length === 0
@@ -123,19 +160,38 @@ export async function captureWebsite(url: string): Promise<CaptureResult> {
         const aboveFoldText = textNodes.filter((el) => el.getBoundingClientRect().top < window.innerHeight).length;
         const totalText = Math.max(1, textNodes.length);
         const fileInputs = document.querySelectorAll("input[type='file']").length;
-        const labelledInputs = toArray(document.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>("input,textarea"))
-          .filter((el) => {
-            const id = el.getAttribute("id");
-            const hasLabelFor = id ? document.querySelector(`label[for="${id}"]`) : null;
-            return Boolean(hasLabelFor || el.closest("label") || el.getAttribute("aria-label"));
-          }).length;
+        const labelledInputs = toArray(
+          document.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>("input,textarea")
+        ).filter((el) => {
+          const id = el.getAttribute("id");
+          const hasLabelFor = id ? document.querySelector(`label[for="${id}"]`) : null;
+          return Boolean(hasLabelFor || el.closest("label") || el.getAttribute("aria-label"));
+        }).length;
         const inputCount = document.querySelectorAll("input,textarea,select").length;
         const tapTargetSmallCount = buttons.filter((el) => {
           const rect = el.getBoundingClientRect();
           return rect.width > 0 && rect.height > 0 && (rect.width < 44 || rect.height < 44);
         }).length;
 
-        return {
+        const links = toArray(document.querySelectorAll<HTMLAnchorElement>("a[href]"))
+          .map((a) => a.href)
+          .filter((href) => typeof href === "string" && href.length > 0);
+
+        const structureRoot = document.querySelector("main") ?? document.body;
+        const structureItems = toArray(structureRoot.querySelectorAll<HTMLElement>("*"))
+          .slice(0, 220)
+          .map((node) => {
+            const className = typeof node.className === "string" ? node.className : "";
+            const classes = className
+              .split(/\s+/)
+              .filter(Boolean)
+              .slice(0, 2)
+              .join(".");
+            return `${node.tagName.toLowerCase()}${classes ? `.${classes}` : ""}`;
+          });
+        const structureSignature = structureItems.join("|");
+
+        const signals = {
           pageTitleLength: document.title.length,
           metaDescriptionLength:
             document.querySelector("meta[name='description']")?.getAttribute("content")?.length ?? 0,
@@ -196,29 +252,59 @@ export async function captureWebsite(url: string): Promise<CaptureResult> {
           socialProofCount: document.querySelectorAll(".testimonial, [data-testimonial], .rating, [data-rating]").length,
           firstViewportTextDensity: Number((aboveFoldText / totalText).toFixed(2))
         };
+
+        return { signals, links, structureSignature };
       });
 
-      await mobileContext.close();
-      await context.close();
+      const internalLinks = payload.links.filter((href: string) => isSameDomain(href, url));
+      const desktopBuffer = await readBufferOrEmpty(desktopPath);
+      const mobileBuffer = await readBufferOrEmpty(mobilePath);
+      const fullPageBuffer = await readBufferOrEmpty(fullPagePath);
 
       return {
+        pageUrl: url,
         desktopPath,
         mobilePath,
-        domSummary: toDomSummary(signals),
-        signals
+        fullPagePath,
+        domFingerprint: quickHash(payload.structureSignature),
+        domSummary: toDomSummary(payload.signals),
+        signals: payload.signals,
+        screenshots: {
+          desktop: desktopBuffer,
+          mobile: mobileBuffer,
+          fullPage: fullPageBuffer
+        },
+        internalLinks
       };
+    } catch {
+      // Fall through to synthetic mode.
     } finally {
-      await browser.close();
+      if (mobileContext) {
+        await mobileContext.close().catch(() => undefined);
+      }
+      if (context) {
+        await context.close().catch(() => undefined);
+      }
     }
   }
 
   const signals = syntheticSignals(url);
   await writeFile(desktopPath, "");
   await writeFile(mobilePath, "");
+  await writeFile(fullPagePath, "");
   return {
+    pageUrl: url,
     desktopPath,
     mobilePath,
+    fullPagePath,
+    domFingerprint: `synthetic-${hashUrl(url)}`,
     domSummary: toDomSummary(signals),
-    signals
+    signals,
+    screenshots: {
+      desktop: Buffer.from([]),
+      mobile: Buffer.from([]),
+      fullPage: Buffer.from([])
+    },
+    internalLinks: []
   };
 }
