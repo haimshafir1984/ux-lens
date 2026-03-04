@@ -3,9 +3,16 @@ import path from "node:path";
 
 import { defaultSignals, type AuditSignals } from "@/lib/audit/signals";
 import { getSharedBrowser } from "@/lib/playwright-browser";
+import {
+  buildScreenshotFilename,
+  extractDomainLabel,
+  isFilenameLengthSafe,
+  shortUrlId
+} from "@/lib/utils/url-id";
 
 export type CaptureResult = {
   pageUrl: string;
+  pageLabel: string;
   desktopPath: string;
   mobilePath: string;
   fullPagePath: string;
@@ -18,6 +25,13 @@ export type CaptureResult = {
     fullPage: Buffer;
   };
   internalLinks: string[];
+  intentData: {
+    pageTitle: string;
+    heroText: string;
+    headings: string[];
+    navLabels: string[];
+    ctaLabels: string[];
+  };
 };
 
 function hashUrl(url: string): number {
@@ -84,12 +98,19 @@ async function readBufferOrEmpty(filePath: string): Promise<Buffer> {
 
 function getArtifactPaths(url: string) {
   const artifactsDir = path.join(process.cwd(), ".audit-artifacts");
-  const safeName = encodeURIComponent(url).replace(/%/g, "_");
+  const desktopFile = buildScreenshotFilename(url, "desktop");
+  const mobileFile = buildScreenshotFilename(url, "mobile");
+  const fullFile = buildScreenshotFilename(url, "full");
+  if (!isFilenameLengthSafe(desktopFile) || !isFilenameLengthSafe(mobileFile) || !isFilenameLengthSafe(fullFile)) {
+    throw new Error(`Unsafe filename length generated for URL: ${url}`);
+  }
+
   return {
     artifactsDir,
-    desktopPath: path.join(artifactsDir, `${safeName}-desktop.png`),
-    mobilePath: path.join(artifactsDir, `${safeName}-mobile.png`),
-    fullPagePath: path.join(artifactsDir, `${safeName}-fullpage.png`)
+    pageLabel: `${extractDomainLabel(url)}-${shortUrlId(url)}`,
+    desktopPath: path.join(artifactsDir, desktopFile),
+    mobilePath: path.join(artifactsDir, mobileFile),
+    fullPagePath: path.join(artifactsDir, fullFile)
   };
 }
 
@@ -103,7 +124,7 @@ function quickHash(input: string): string {
 }
 
 export async function captureWebsite(url: string): Promise<CaptureResult> {
-  const { artifactsDir, desktopPath, mobilePath, fullPagePath } = getArtifactPaths(url);
+  const { artifactsDir, pageLabel, desktopPath, mobilePath, fullPagePath } = getArtifactPaths(url);
   await mkdir(artifactsDir, { recursive: true });
 
   const browser = await getSharedBrowser();
@@ -176,6 +197,26 @@ export async function captureWebsite(url: string): Promise<CaptureResult> {
         const links = toArray(document.querySelectorAll<HTMLAnchorElement>("a[href]"))
           .map((a) => a.href)
           .filter((href) => typeof href === "string" && href.length > 0);
+
+        const cleanText = (value: string | null | undefined) =>
+          (value ?? "").replace(/\s+/g, " ").trim();
+        const headingTexts = toArray(document.querySelectorAll<HTMLElement>("h1,h2,h3"))
+          .map((node) => cleanText(node.textContent))
+          .filter((value) => value.length > 0)
+          .slice(0, 8);
+        const navLabels = toArray(document.querySelectorAll<HTMLElement>("nav a, nav button"))
+          .map((node) => cleanText(node.textContent))
+          .filter((value) => value.length > 0)
+          .slice(0, 10);
+        const ctaLabels = toArray(document.querySelectorAll<HTMLElement>("a,button,input[type='submit']"))
+          .map((node) => cleanText(node.textContent || node.getAttribute("value")))
+          .filter((value) => value.length > 0)
+          .filter((value) => /sign up|start|trial|buy|shop|book|contact|get|subscribe|demo|register|התחל|צור קשר|קנה|הרשמה/i.test(value))
+          .slice(0, 10);
+        const heroNode =
+          document.querySelector<HTMLElement>("main h1, section h1, header h1, [data-hero] h1") ??
+          document.querySelector<HTMLElement>("h1");
+        const heroText = cleanText(heroNode?.textContent ?? "");
 
         const structureRoot = document.querySelector("main") ?? document.body;
         const structureItems = toArray(structureRoot.querySelectorAll<HTMLElement>("*"))
@@ -253,7 +294,18 @@ export async function captureWebsite(url: string): Promise<CaptureResult> {
           firstViewportTextDensity: Number((aboveFoldText / totalText).toFixed(2))
         };
 
-        return { signals, links, structureSignature };
+        return {
+          signals,
+          links,
+          structureSignature,
+          intentData: {
+            pageTitle: cleanText(document.title),
+            heroText,
+            headings: headingTexts,
+            navLabels,
+            ctaLabels
+          }
+        };
       });
 
       const internalLinks = payload.links.filter((href: string) => isSameDomain(href, url));
@@ -263,6 +315,7 @@ export async function captureWebsite(url: string): Promise<CaptureResult> {
 
       return {
         pageUrl: url,
+        pageLabel,
         desktopPath,
         mobilePath,
         fullPagePath,
@@ -274,7 +327,8 @@ export async function captureWebsite(url: string): Promise<CaptureResult> {
           mobile: mobileBuffer,
           fullPage: fullPageBuffer
         },
-        internalLinks
+        internalLinks,
+        intentData: payload.intentData
       };
     } catch {
       // Fall through to synthetic mode.
@@ -294,6 +348,7 @@ export async function captureWebsite(url: string): Promise<CaptureResult> {
   await writeFile(fullPagePath, "");
   return {
     pageUrl: url,
+    pageLabel,
     desktopPath,
     mobilePath,
     fullPagePath,
@@ -305,6 +360,13 @@ export async function captureWebsite(url: string): Promise<CaptureResult> {
       mobile: Buffer.from([]),
       fullPage: Buffer.from([])
     },
-    internalLinks: []
+    internalLinks: [],
+    intentData: {
+      pageTitle: "",
+      heroText: "",
+      headings: [],
+      navLabels: [],
+      ctaLabels: []
+    }
   };
 }

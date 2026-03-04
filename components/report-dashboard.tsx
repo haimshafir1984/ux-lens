@@ -128,6 +128,41 @@ export function ReportDashboard({ report }: { report: AuditReport }) {
         </Card>
       )}
 
+      {report.intentAnalysis && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Intent Analysis</CardTitle>
+            <CardDescription>זיהוי מטרת האתר הראשית והאם הממשק תומך בה.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3 text-sm">
+            <div className="grid gap-2 sm:grid-cols-2">
+              <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                Primary site intent: {report.intentAnalysis.primaryIntent}
+              </div>
+              <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                Primary CTA: {report.intentAnalysis.primaryCTA}
+              </div>
+              <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                Confidence: {Math.round(report.intentAnalysis.confidence * 100)}%
+              </div>
+              <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                Intent clarity score: {report.intentAnalysis.intentClarityScore}
+              </div>
+            </div>
+            {report.intentAnalysis.issues.length > 0 && (
+              <div className="space-y-2">
+                {report.intentAnalysis.issues.map((issue, index) => (
+                  <div key={`${issue.type}-${index}`} className="rounded-lg border border-slate-200 bg-white px-3 py-2">
+                    <p className="font-medium text-slate-900">{issue.type}</p>
+                    <p className="text-xs text-slate-500">Severity: {issue.severity}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       {report.topCriticalProblems && report.topCriticalProblems.length > 0 && (
         <Card>
           <CardHeader>

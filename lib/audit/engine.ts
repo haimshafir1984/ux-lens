@@ -5,6 +5,7 @@ import { runWithConcurrency } from "@/lib/concurrency";
 import { crawlWebsite } from "@/lib/crawler";
 import { closeSharedBrowser } from "@/lib/playwright-browser";
 import { generateRedesignSuggestions } from "@/lib/redesign-generator";
+import { detectUxIntent } from "@/lib/ux-intent-detection";
 import { detectUxPatterns } from "@/lib/ux-pattern-intelligence";
 
 type RunAuditOptions = {
@@ -212,6 +213,20 @@ export async function runAudit(url: string, options: RunAuditOptions = {}) {
 
     const report = aggregateReports(url, pageReports);
     report.insights = detectUxPatterns({ pageReports });
+    report.intentAnalysis = detectUxIntent({
+      report,
+      pages: captures.slice(0, 5).map((capture) => ({
+        url: capture.pageUrl,
+        pageTitle: capture.intentData.pageTitle,
+        heroText: capture.intentData.heroText,
+        headings: capture.intentData.headings,
+        navLabels: capture.intentData.navLabels,
+        ctaLabels: capture.intentData.ctaLabels,
+        primaryCtaAboveFold: capture.signals.primaryCtaAboveFold,
+        duplicatePrimaryCTA: capture.signals.duplicatePrimaryCTA,
+        ctaCount: capture.signals.ctaCount
+      }))
+    });
     report.redesignSuggestions = await generateRedesignSuggestions(report.findings);
     report.pageReports = captures.map((capture) => {
       const page = pageReports.find((item) => item.targetUrl === capture.pageUrl);

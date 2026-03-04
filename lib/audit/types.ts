@@ -102,6 +102,16 @@ export type AuditReport = {
   criticalUxBlockersDetected?: boolean;
   criticalUxBlockersMessage?: string;
   criticalUxBlockers?: string[];
+  intentAnalysis?: {
+    primaryIntent: string;
+    confidence: number;
+    primaryCTA: string;
+    intentClarityScore: number;
+    issues: Array<{
+      type: string;
+      severity: "high" | "medium" | "low";
+    }>;
+  };
 };
 
 export type AuditContext = {
