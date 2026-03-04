@@ -32,7 +32,12 @@ function toPageLabel(url: string): string {
 
 export function SummaryCards({ report, onViewIssue }: SummaryCardsProps) {
   const criticalIssues = report.findings.filter((item) => item.severity === "critical");
-  const pagesScanned = report.pageReports?.length ?? 1;
+  const analyzedPages = report.pages ?? report.pageReports?.map((page) => ({
+    url: page.url,
+    score: page.score,
+    issues: page.findings
+  })) ?? [{ url: report.targetUrl, score: report.score, issues: report.findings }];
+  const pagesScanned = analyzedPages.length;
 
   return (
     <div className="space-y-4">
@@ -62,7 +67,7 @@ export function SummaryCards({ report, onViewIssue }: SummaryCardsProps) {
           <CardContent>
             <p className="text-3xl font-bold text-slate-900">{pagesScanned}</p>
             <div className="mt-2 flex flex-wrap gap-1.5">
-              {(report.pageReports ?? [{ url: report.targetUrl, score: report.score, findings: report.findings }])
+              {analyzedPages
                 .slice(0, 6)
                 .map((page) => (
                   <span

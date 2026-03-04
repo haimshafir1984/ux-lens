@@ -66,7 +66,14 @@ export function ReportDashboard({ report }: { report: AuditReport }) {
     setFocusIssueId(issueId);
   }
 
-  const pageData = report.pageReports ?? [{ url: report.targetUrl, score: report.score, findings: report.findings }];
+  const pageData =
+    report.pages?.map((page) => ({
+      url: page.url,
+      score: page.score,
+      findings: page.issues
+    })) ??
+    report.pageReports ??
+    [{ url: report.targetUrl, score: report.score, findings: report.findings }];
 
   return (
     <div className="space-y-4">

@@ -78,6 +78,11 @@ function aggregateReports(targetUrl: string, pageReports: AuditReport[]): AuditR
         }
       : undefined,
     topCriticalProblems: allFindings.filter((item) => item.severity === "critical").slice(0, 5),
+    pages: pageReports.map((page) => ({
+      url: page.targetUrl,
+      score: page.score,
+      issues: page.findings
+    })),
     pageReports: pageReports.map((page) => ({
       url: page.targetUrl,
       score: page.score,
@@ -183,89 +188,75 @@ export async function runAudit(url: string, options: RunAuditOptions = {}) {
       };
     }
 
-    const firstByFingerprint = new Map<string, (typeof captures)[number]>();
-    for (const capture of captures) {
-      if (!firstByFingerprint.has(capture.domFingerprint)) {
-        firstByFingerprint.set(capture.domFingerprint, capture);
-      }
-    }
-
-    const uniqueCaptures = Array.from(firstByFingerprint.values());
     let startedAnalyzeCount = 0;
-    const analyzedUnique = await runWithConcurrency(uniqueCaptures, 3, async (captured) => {
+    const analyzedPairsRaw = await runWithConcurrency(captures, 3, async (captured) => {
       const analyzeIndex = startedAnalyzeCount + 1;
       startedAnalyzeCount += 1;
       emitProgress({
         stage: "analyzing",
-        message: `מנתח עמוד ${analyzeIndex} מתוך ${uniqueCaptures.length}`,
-        progress: 50 + Math.round((analyzeIndex / Math.max(1, uniqueCaptures.length)) * 30),
+        message: `מנתח עמוד ${analyzeIndex} מתוך ${captures.length}`,
+        progress: 50 + Math.round((analyzeIndex / Math.max(1, captures.length)) * 30),
         currentPage: captured.pageUrl,
         currentPageIndex: analyzeIndex,
-        totalPages: uniqueCaptures.length,
+        totalPages: captures.length,
         discoveredPages: pages
       });
 
-      return analyzeScreenshotsWithVision({
-        url: captured.pageUrl,
-        desktopPath: captured.desktopPath,
-        mobilePath: captured.mobilePath,
-        fullPagePath: captured.fullPagePath,
-        domSummary: captured.domSummary,
-        signals: captured.signals,
-        screenshots: {
-          desktop: captured.screenshots.desktop,
-          mobile: captured.screenshots.mobile,
-          fullPage: captured.screenshots.fullPage
-        }
-      });
-    });
-
-    const reportByFingerprint = new Map<string, AuditReport>();
-    uniqueCaptures.forEach((capture, index) => {
-      const analyzed = analyzedUnique[index];
-      if (analyzed) {
-        reportByFingerprint.set(capture.domFingerprint, analyzed);
+      try {
+        const report = await analyzeScreenshotsWithVision({
+          url: captured.pageUrl,
+          desktopPath: captured.desktopPath,
+          mobilePath: captured.mobilePath,
+          fullPagePath: captured.fullPagePath,
+          domSummary: captured.domSummary,
+          signals: captured.signals,
+          screenshots: {
+            desktop: captured.screenshots.desktop,
+            mobile: captured.screenshots.mobile,
+            fullPage: captured.screenshots.fullPage
+          }
+        });
+        return { captured, report };
+      } catch {
+        // Fail-safe: keep audit running even if one page analysis fails.
+        return null;
       }
     });
+    const analyzedPairs = analyzedPairsRaw.filter(
+      (item): item is NonNullable<typeof item> => Boolean(item)
+    );
+    const pageReports = analyzedPairs.map(({ captured, report }) => ({
+      ...report,
+      targetUrl: captured.pageUrl
+    }));
+    if (pageReports.length === 0) {
+      return {
+        step: "completed" as const,
+        report: {
+          targetUrl: url,
+          generatedAt: new Date().toISOString(),
+          score: 0,
+          findings: [],
+          annotations: [],
+          requiresFileUpload: false,
+          checks: [],
+          checksSummary: { total: 0, passed: 0, warnings: 0, critical: 0 },
+          pages: []
+        }
+      };
+    }
 
     const signalsByUrl = new Map(
-      captures.map((capture) => [
-        capture.pageUrl,
+      analyzedPairs.map(({ captured }) => [
+        captured.pageUrl,
         {
-          ctaCount: capture.signals.ctaCount,
-          navItemCount: capture.signals.navItemCount,
-          contrastRiskElements: capture.signals.contrastRiskElements,
-          headingCount: capture.signals.headingCount
+          ctaCount: captured.signals.ctaCount,
+          navItemCount: captured.signals.navItemCount,
+          contrastRiskElements: captured.signals.contrastRiskElements,
+          headingCount: captured.signals.headingCount
         }
       ])
     );
-
-    const firstUrlByFingerprint = new Map<string, string>();
-    const pageReports = captures.map((capture) => {
-      const templateReport = reportByFingerprint.get(capture.domFingerprint);
-      const canonicalUrl = firstUrlByFingerprint.get(capture.domFingerprint) ?? capture.pageUrl;
-      if (!firstUrlByFingerprint.has(capture.domFingerprint)) {
-        firstUrlByFingerprint.set(capture.domFingerprint, capture.pageUrl);
-      }
-
-      const report = templateReport ?? analyzedUnique[0];
-      if (!report) {
-        throw new Error("No analyzed report available");
-      }
-      return {
-        ...report,
-        targetUrl: capture.pageUrl,
-        pageReports: [
-          {
-            url: capture.pageUrl,
-            score: report.score,
-            findings: report.findings.slice(0, 8),
-            domFingerprint: capture.domFingerprint,
-            reusedFrom: canonicalUrl === capture.pageUrl ? undefined : canonicalUrl
-          }
-        ]
-      };
-    });
 
     const report = aggregateReports(url, pageReports);
     emitProgress({
@@ -277,30 +268,32 @@ export async function runAudit(url: string, options: RunAuditOptions = {}) {
     report.insights = detectUxPatterns({ pageReports });
     report.intentAnalysis = detectUxIntent({
       report,
-      pages: captures.slice(0, 5).map((capture) => ({
-        url: capture.pageUrl,
-        pageTitle: capture.intentData.pageTitle,
-        heroText: capture.intentData.heroText,
-        headings: capture.intentData.headings,
-        navLabels: capture.intentData.navLabels,
-        ctaLabels: capture.intentData.ctaLabels,
-        primaryCtaAboveFold: capture.signals.primaryCtaAboveFold,
-        duplicatePrimaryCTA: capture.signals.duplicatePrimaryCTA,
-        ctaCount: capture.signals.ctaCount
+      pages: analyzedPairs.slice(0, 5).map(({ captured }) => ({
+        url: captured.pageUrl,
+        pageTitle: captured.intentData.pageTitle,
+        heroText: captured.intentData.heroText,
+        headings: captured.intentData.headings,
+        navLabels: captured.intentData.navLabels,
+        ctaLabels: captured.intentData.ctaLabels,
+        primaryCtaAboveFold: captured.signals.primaryCtaAboveFold,
+        duplicatePrimaryCTA: captured.signals.duplicatePrimaryCTA,
+        ctaCount: captured.signals.ctaCount
       }))
     });
     report.redesignSuggestions = await generateRedesignSuggestions(report.findings);
-    report.pageReports = captures.map((capture) => {
-      const page = pageReports.find((item) => item.targetUrl === capture.pageUrl);
-      const firstUrl = firstUrlByFingerprint.get(capture.domFingerprint) ?? capture.pageUrl;
+    report.pageReports = analyzedPairs.map(({ captured, report: pageReport }) => {
       return {
-        url: capture.pageUrl,
-        score: page?.score ?? report.score,
-        findings: (page?.findings ?? report.findings).slice(0, 8),
-        domFingerprint: capture.domFingerprint,
-        reusedFrom: firstUrl === capture.pageUrl ? undefined : firstUrl
+        url: captured.pageUrl,
+        score: pageReport.score,
+        findings: pageReport.findings.slice(0, 8),
+        domFingerprint: captured.domFingerprint
       };
     });
+    report.pages = analyzedPairs.map(({ captured, report: pageReport }) => ({
+      url: captured.pageUrl,
+      score: pageReport.score,
+      issues: pageReport.findings
+    }));
 
     const blockers = findCriticalBlockers(pageReports, signalsByUrl);
     if (blockers.length > 0) {

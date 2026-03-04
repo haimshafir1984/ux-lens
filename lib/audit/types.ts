@@ -81,6 +81,11 @@ export type AuditReport = {
     };
   };
   topCriticalProblems?: AuditFinding[];
+  pages?: Array<{
+    url: string;
+    score: number;
+    issues: AuditFinding[];
+  }>;
   pageReports?: Array<{
     url: string;
     score: number;
