@@ -45,9 +45,13 @@ function toAbsoluteUrl(baseUrl: string, href: string): string | null {
   }
 }
 
+function canonicalHost(host: string): string {
+  return host.toLowerCase().replace(/^www\./, "");
+}
+
 function isSameDomain(url: string, originHost: string): boolean {
   try {
-    return new URL(url).host === originHost;
+    return canonicalHost(new URL(url).host) === canonicalHost(originHost);
   } catch {
     return false;
   }
