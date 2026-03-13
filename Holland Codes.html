@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>שאלון הולנד המלא - אבחון ומחשבון קריירה</title>
+    <style>
+        :root { --primary: #2c3e50; --accent: #3498db; --bg: #f4f7f9; --white: #ffffff; --success: #27ae60; }
+        body { font-family: 'Segoe UI', system-ui, sans-serif; background-color: var(--bg); margin: 0; padding: 20px; color: var(--primary); }
+        .container { max-width: 800px; margin: auto; background: var(--white); padding: 40px; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); }
+        h1 { text-align: center; border-bottom: 4px solid var(--accent); padding-bottom: 10px; margin-bottom: 10px; }
+        .intro { text-align: center; color: #666; margin-bottom: 30px; font-size: 1.1em; }
+        
+        .question-card { background: #fff; border: 1px solid #eee; padding: 20px; margin-bottom: 15px; border-radius: 12px; transition: 0.3s; }
+        .question-card:hover { border-color: var(--accent); box-shadow: 0 5px 15px rgba(0,0,0,0.05); }
+        .q-text { font-weight: 600; font-size: 1.1em; margin-bottom: 15px; display: block; }
+        
+        .options { display: flex; justify-content: space-around; background: #f8f9fa; padding: 10px; border-radius: 30px; }
+        .options label { cursor: pointer; font-size: 0.95em; padding: 5px 12px; border-radius: 20px; transition: 0.2s; }
+        .options input { margin-left: 8px; }
+        .options label:hover { background: #e9ecef; }
+
+        button { background: var(--primary); color: white; border: none; padding: 18px; border-radius: 12px; cursor: pointer; font-size: 1.2em; width: 100%; font-weight: bold; margin-top: 30px; transition: 0.3s; }
+        button:hover { background: var(--accent); transform: translateY(-2px); }
+
+        #result { display: none; margin-top: 40px; border-top: 2px solid #eee; padding-top: 30px; }
+        .bar-row { display: flex; align-items: center; margin-bottom: 12px; }
+        .bar-label { width: 120px; font-weight: bold; }
+        .bar-bg { flex-grow: 1; background: #e9ecef; height: 20px; border-radius: 10px; overflow: hidden; }
+        .bar-fill { height: 100%; background: var(--accent); width: 0; transition: width 1.2s cubic-bezier(0.1, 0.5, 0.5, 1); }
+
+        .career-box { margin-top: 30px; background: #f0fdf4; padding: 25px; border-radius: 15px; border: 2px solid var(--success); }
+        .career-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 15px; }
+        .career-item { background: white; padding: 12px; border-radius: 8px; border-right: 4px solid var(--success); box-shadow: 0 2px 4px rgba(0,0,0,0.05); font-weight: 500; }
+        .type-desc { background: #eef2f7; padding: 15px; border-radius: 10px; margin-top: 20px; line-height: 1.5; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>אבחון הולנד (RIASEC)</h1>
+    <p class="intro">גלה את הפרופיל התעסוקתי שלך באמצעות ניתוח לוגי משולב.</p>
+    
+    <form id="hollandForm">
+        <div id="questions"></div>
+        <button type="button" onclick="calculate()">נתח את הפרופיל שלי</button>
+    </form>
+
+    <div id="result">
+        <h2>תוצאות הניתוח:</h2>
+        <div id="chart"></div>
+        
+        <div id="mainAnalysis" class="type-desc"></div>
+
+        <div class="career-box">
+            <h3>מחשבון קריירה (לפי קוד משולב):</h3>
+            <p id="comboText"></p>
+            <div class="career-grid" id="careerSuggestions"></div>
+        </div>
+    </div>
+</div>
+
+<script>
+    const questions = [
+        { id: 'R', text: "תיקון מכשירי חשמל או מכניקה" }, { id: 'R', text: "עבודה פיזית או טכנית בחוץ" }, { id: 'R', text: "שימוש בכלי עבודה ידניים או חשמליים" }, { id: 'R', text: "הרכבה ותפעול של מכונות" },
+        { id: 'I', text: "ניתוח נתונים או פתרון בעיות לוגיות" }, { id: 'I', text: "מחקר מדעי או לימוד נושאים מורכבים" }, { id: 'I', text: "עבודה עם נוסחאות או תכנות" }, { id: 'I', text: "ביצוע ניסויים ובדיקת השערות" },
+        { id: 'A', text: "כתיבת סיפורים, שירים או תוכן" }, { id: 'A', text: "עיצוב ויזואלי, ציור או צילום" }, { id: 'A', text: "נגינה, משחק או יצירה אמנותית" }, { id: 'A', text: "חשיבה על רעיונות מחוץ לקופסה" },
+        { id: 'S', text: "הדרכה, הוראה או אימון אנשים" }, { id: 'S', text: "עזרה לזולת ופתרון בעיות חברתיות" }, { id: 'S', text: "טיפול פיזי או נפשי באחרים" }, { id: 'S', text: "עבודה בצוות ושיתוף פעולה" },
+        { id: 'E', text: "ניהול פרויקטים או הובלת צוותים" }, { id: 'E', text: "שכנוע, מכירות או משא ומתן" }, { id: 'E', text: "יזמות עסקית ונטילת סיכונים" }, { id: 'E', text: "נשיאת נאומים והשפעה על קהל" },
+        { id: 'C', text: "ארגון מידע, מסמכים ותיוק" }, { id: 'C', text: "עבודה עם תקציבים ומספרים" }, { id: 'C', text: "הקפדה על נהלים וסדר קבוע" }, { id: 'C', text: "בדיקת דיוק ופרטים קטנים" }
+    ];
+
+    const typeDetails = {
+        'R': { name: "ביצועי", desc: "מעדיף עבודה מעשית, טכנית ומוחשית. אוהב לעבוד עם ידיים ומכונות." },
+        'I': { name: "חקרני", desc: "סקרן, אנליטי ואוהב לחקור. מצטיין בפתרון בעיות מורכבות וחשיבה מופשטת." },
+        'A': { name: "אמנותי", desc: "יצירתי, עצמאי וזקוק לביטוי עצמי. מעדיף סביבות לא מובנות וחופש פעולה." },
+        'S': { name: "חברתי", desc: "אוהב לעזור, ללמד ולטפל. בעל אינטליגנציה רגשית גבוהה ויכולת הקשבה." },
+        'E': { name: "יזמי", desc: "מנהיג, שאפתן ומשכנע. אוהב להוביל פרויקטים, לנהל ולקחת יוזמה." },
+        'C': { name: "מנהלתי", desc: "מאורגן, דייקן ואוהב סדר. מצטיין בעבודה עם נתונים, כללים ומערכות מובנות." }
+    };
+
+    const careerMap = {
+        'RI': ["מהנדס מכונות", "טכנאי רפואי", "גיאולוג"], 'RS': ["פיזיותרפיסט", "מאמן כושר", "שוטר"],
+        'IS': ["רופא", "פסיכולוג", "מרצה"], 'IE': ["אנליסט שוק", "מנהל מוצר", "חוקר פשעי סייבר"],
+        'AS': ["מטפל באמנות", "מעצב חברתי", "מורה למוזיקה"], 'AE': ["מנהל פרסום", "אדריכל", "מעצב פנים"],
+        'EC': ["עורך דין", "מנהל תפעול", "בנקאי"], 'SC': ["מנהל משאבי אנוש", "אדמיניסטרטור", "יועץ ארגוני"],
+        'RC': ["מהנדס תעשייה וניהול", "מנהל לוגיסטיקה", "בקר איכות"], 'ES': ["מנהל מכירות", "יזם חברתי", "פוליטיקאי"]
+    };
+
+    const qBox = document.getElementById('questions');
+    questions.forEach((q, i) => {
+        qBox.innerHTML += `<div class="question-card"><span class="q-text">${i+1}. ${q.text}</span>
+            <div class="options">${[0,1,2,3].map(v => `<label><input type="radio" name="q${i}" value="${v}"> ${v}</label>`).join('')}</div></div>`;
+    });
+
+    function calculate() {
+        let scores = { R:0, I:0, A:0, S:0, E:0, C:0 };
+        questions.forEach((q, i) => {
+            const r = document.querySelector(`input[name="q${i}"]:checked`);
+            if(r) scores[q.id] += parseInt(r.value);
+        });
+
+        document.getElementById('result').style.display = 'block';
+        const sorted = Object.entries(scores).sort((a,b) => b[1] - a[1]);
+        
+        const chart = document.getElementById('chart'); chart.innerHTML = '';
+        sorted.forEach(([t, s]) => {
+            const p = (s/12)*100;
+            chart.innerHTML += `<div class="bar-row"><div class="bar-label">${typeDetails[t].name}</div>
+                <div class="bar-bg"><div class="bar-fill" style="width:${p}%"></div></div></div>`;
+        });
+
+        const top = sorted[0][0]; const top2 = sorted[1][0];
+        document.getElementById('mainAnalysis').innerHTML = `<strong>הטיפוס המוביל שלך: ${typeDetails[top].name}</strong><br>${typeDetails[top].desc}`;
+        
+        const combo = [top, top2].sort().join('');
+        document.getElementById('comboText').innerHTML = `השילוב שלך הוא <strong>${top}${top2}</strong>. מקצועות מומלצים עבורך:`;
+        
+        const cGrid = document.getElementById('careerSuggestions'); cGrid.innerHTML = '';
+        const list = careerMap[combo] || ["מנהל פרויקטים", "יועץ רב-תחומי", "עצמאי"];
+        list.forEach(c => { cGrid.innerHTML += `<div class="career-item">${c}</div>`; });
+
+        window.scrollTo({ top: document.getElementById('result').offsetTop - 20, behavior: 'smooth' });
+    }
+</script>
+</body>
+</html>
